@@ -88,17 +88,99 @@ class QAP
 
 		void init_heuristic()
 		{
+			const int size = static_cast<int>(current_permutation.size());
+			std::vector<int> as(size), bs(size);
+
+			for (int i = 0; i < size; ++i)
+			{
+				as[i] = i;
+				bs[i] = i;
+			}
+
+			std::sort(as.begin(), as.end(), [&](const auto& left, const auto& right) { return a.data[left] > a.data[right]; });
+			std::sort(bs.begin(), bs.end(), [&](const auto& left, const auto& right) { return b.data[left] < b.data[right]; });
+
+			for (int i = 0; i < size; ++i)
+				current_permutation[as[i]] = bs[i];
+		}
+
+		std::vector<int> gen_2opt(std::vector<int> perm, int i, int j)
+		{
+			std::vector<int> ret(perm);
+			std::swap(ret[i], ret[j]);
+			return ret;
+		}
+
+		float obj_func(std::vector<int> permutation)
+		{
+			float sum = 0;
+			for (int i = 0; i < size; ++i) {
+				for (int j = 0; j < size; ++j)
+				{
+					sum += a[i][j] * b[permutation[i]][permutation[j]];
+				}
+			}
+			return sum;
+		}
+
+		float obj_func_neighbour()
+		{
 
 		}
 
-		void alg1()
+		std::vector<int> greedy(std::vector<int> perm)
 		{
-			
+			std::vector<int> best(perm);
+			std::vector<int> neighbour;
+			float current_obj_func = obj_func(perm);
+			float best_obj_func = current_obj_func;
+			bool found;
+
+			do {
+				found = false;
+
+				for (int i = 0; (i < size - 1) && !found; ++i) {
+					for (int j = i + 1; (j < size) && !found; ++j)
+					{
+						neighbour = gen_2opt(best, i, j);
+						current_obj_func = obj_func(neighbour);
+						if (current_obj_func < best_obj_func) {
+							best_obj_func = current_obj_func;
+							best = neighbour;
+							found = true;
+						}
+					}
+				}
+			} while (found == true);
+
+			return best;
 		}
 
-		std::vector<int> 2opt(std::vector<int> perm, int a, int b)
+		std::vector<int> steepest(std::vector<int> perm)
 		{
-			
+			std::vector<int> best(perm);
+			std::vector<int> neighbour;
+			float current_obj_func = obj_func(perm);
+			float best_obj_func = current_obj_func;
+			bool found;
+
+			do {
+				found = 0;
+				for (int i = 0; i < size - 1; ++i) {
+					for (int j = i + 1; j < size; ++j)
+					{
+						neighbour = gen_2opt(best, i, j);
+						current_obj_func = obj_func(neighbour);
+						if (current_obj_func < best_obj_func) {
+							best_obj_func = current_obj_func;
+							best = neighbour;
+							found = 1;
+						}
+					}
+				}
+			} while (found == 1);
+
+			return best;
 		}
 
 	private:
@@ -108,83 +190,6 @@ class QAP
 		std::vector<int> current_permutation;
 		std::vector<float> partial_costs;
 };
-
-std::pair<std::vector<int>, std::vector<int>> minmax_elem_masked(const Mat& m, const std::unordered_set<int>& mask)
-{
-	std::vector<float> max_v(m.h, std::numeric_limits<float>::min());
-	std::vector<float> min_v(m.h, std::numeric_limits<float>::max());
-	std::vector<int> max_e(m.h, -1);
-	std::vector<int> min_e(m.h, -1);
-
-	for (int i = 0; i < m.data.size(); ++i)
-	{
-		if (mask.find(i) != mask.end())
-			continue;
-
-		const int row = i / m.h;
-
-		if (m.data[i] > max_v[row])
-		{
-			max_v[row] = m.data[i];
-			max_e[row] = i;
-		}
-
-		if (m.data[i] < min_v[row])
-		{
-			min_v[row] = m.data[i];
-			min_e[row] = i;
-		}
-	}
-
-	return { min_e, max_e };
-}
-
-//TODO: pass one matrix transposed (a, b.t) or (a.t, b)
-std::vector<std::pair<int, int>> qap_start_heuristic(const Mat& a, const Mat& b)
-{
-	const int size = a.w; //whatever, we assume that they are rectangles
-	std::vector<std::pair<int, int>> ret(size);
-	std::unordered_set<int> usedA;
-	std::unordered_set<int> usedB;
-
-	for (int i = 0; i < a.h; i++) {
-		usedA.insert(i + i * a.w);
-		usedB.insert(i + i * a.w);
-	}
-
-	for (int i = 0; i < size; ++i)
-	{
-		auto&& [a_min_rows, a_max_rows] = minmax_elem_masked(a, usedA);
-		auto&& [b_min_rows, b_max_rows] = minmax_elem_masked(b, usedB);
-
-		std::vector<float> ab, ba;
-
-		for (int j = 0; j < a_max_rows.size(); ++j)
-			ab.push_back(a.data[a_max_rows[j]] * b.data[b_min_rows[j]]);
-
-		for (int j = 0; j < b_max_rows.size(); ++j)
-			ba.push_back(b.data[b_max_rows[j]] * a.data[a_min_rows[j]]);
-
-		auto min_ab = std::min_element(ab.cbegin(), ab.cend());
-		auto min_ba = std::min_element(ba.cbegin(), ba.cend());
-
-		if (*min_ab < *min_ba)
-		{
-			const auto id = std::distance(ab.cbegin(), min_ab);
-			usedA.insert(a_max_rows[id]);
-			usedB.insert(b_min_rows[id]);
-		}
-
-		else
-		{
-			const auto id = std::distance(ba.cbegin(), min_ba);
-			usedA.insert(a_min_rows[id]);
-			usedB.insert(b_max_rows[id]);
-		}
-	}
-
-	return ret;
-}
 
 float time_count()
 {
