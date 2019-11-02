@@ -72,7 +72,7 @@ class QAP
 			b = { tmp_vec, n, n };
 
 			current_permutation = std::vector<int>(n, 0);
-			partial_costs = std::vector<float>(n, 0);
+			partial_costs = std::vector<float>(n*n, 0);
 		}
 
 		void init_random()
@@ -86,7 +86,7 @@ class QAP
 				std::swap(current_permutation[i], current_permutation[rng(0, i)]);
 		}
 
-		void init_heuristic()
+		float init_heuristic()
 		{
 			const int size = static_cast<int>(current_permutation.size());
 			std::vector<int> as(size), bs(size);
@@ -102,54 +102,65 @@ class QAP
 
 			for (int i = 0; i < size; ++i)
 				current_permutation[as[i]] = bs[i];
+
+			return init_obj_func(current_permutation);
 		}
 
-		std::vector<int> gen_2opt(const std::vector<int>& perm, int i, int j)
+		void gen_2opt(const std::vector<int>& perm, std::vector<int>& out, int i, int j)
 		{
-			std::vector<int> ret(perm);
-			std::swap(ret[i], ret[j]);
+			std::memcpy(out.data(), perm.data(), sizeof(int) * perm.size());
+			std::swap(out[i], out[j]);
 
-			recalculate_obj(i, j);
-
-			return ret;
+			recalculate_obj(out, i, j);
 		}
 
-		float obj_func(const std::vector<int>& permutation)
+		float obj_func(const std::vector<float>& costs)
 		{
 			float sum = 0;
 
-			for (const auto part : partial_costs)
+			for (const auto part : costs)
 				sum += part;
 
 			return sum;
 		}
 
-		float recalculate_obj(int i, int j)
+		void recalculate_obj(const std::vector<int>& perm, int i, int j)
 		{
-			const int size = current_permutation.size();
+			const int size = perm.size();
 			
 			//recalculate i, j rows
 			for (int k = 0; k < size; ++k)
-				partial_costs[i * size + k] = a.data[i * size + k] * b.data[current_permutation[i] * b.w + current_permutation[k]];
+				partial_costs[i * size + k] = a.data[i * size + k] * b.data[perm[i] * b.w + perm[k]];
 
 			for (int k = 0; k < size; ++k)
-				partial_costs[j * size + k] = a.data[j * size + k] * b.data[current_permutation[j] * b.w + current_permutation[k]];
+				partial_costs[j * size + k] = a.data[j * size + k] * b.data[perm[j] * b.w + perm[k]];
 
 			//recalculate i, j columns
 			for (int k = 0; k < size; ++k)
-				partial_costs[k * size + i] = a.data[k * size + i] * b.data[current_permutation[k] * b.w + current_permutation[i]];
+				partial_costs[k * size + i] = a.data[k * size + i] * b.data[perm[k] * b.w + perm[i]];
 
 			for (int k = 0; k < size; ++k)
-				partial_costs[k * size + j] = a.data[k * size + j] * b.data[current_permutation[k] * b.w + current_permutation[j]];
+				partial_costs[k * size + j] = a.data[k * size + j] * b.data[perm[k] * b.w + perm[j]];
 		}
 
-		std::vector<int> greedy(const std::vector<int>& perm)
+		float init_obj_func(const std::vector<int>& perm)
 		{
 			const int size = static_cast<int>(current_permutation.size());
+
+			for (int i = 0; i < size; ++i) 
+				for (int j = 0; j < size; ++j)
+					partial_costs[i * size + j] = a.data[i * a.w + j] * b.data[perm[i] * b.w + perm[j]];
+
+			return obj_func(partial_costs);
+		}
+
+		float greedy(const std::vector<int>& perm)
+		{
 			std::vector<int> best(perm);
-			std::vector<int> neighbour;
-			float current_obj_func = obj_func(perm);
-			float best_obj_func = current_obj_func;
+			std::vector<int> neighbour(perm);
+			
+			const int size = static_cast<int>(current_permutation.size());
+			float best_obj_func = init_obj_func(perm);
 			bool found;
 
 			do {
@@ -158,46 +169,73 @@ class QAP
 				for (int i = 0; (i < size - 1) && !found; ++i) {
 					for (int j = i + 1; (j < size) && !found; ++j)
 					{
-						neighbour = gen_2opt(best, i, j);
-						current_obj_func = obj_func(neighbour);
+						gen_2opt(best, neighbour, i, j);
+						const float current_obj_func = obj_func(partial_costs);
+
 						if (current_obj_func < best_obj_func) {
 							best_obj_func = current_obj_func;
-							best = neighbour;
+							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
 							found = true;
 						}
 					}
 				}
-			} while (found == true);
+			} while (found);
 
-			return best;
+			std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
+			return best_obj_func;
 		}
 
-		std::vector<int> steepest(std::vector<int> perm)
+		float steepest(const std::vector<int>& perm)
 		{
 			std::vector<int> best(perm);
-			std::vector<int> neighbour;
-			float current_obj_func = obj_func(perm);
-			float best_obj_func = current_obj_func;
-			bool found;
+			std::vector<int> neighbour(perm);
+
 			const int size = static_cast<int>(current_permutation.size());
+			float best_obj_func = init_obj_func(perm);
+			bool found;
 
 			do {
-				found = 0;
+				found = false;
 				for (int i = 0; i < size - 1; ++i) {
 					for (int j = i + 1; j < size; ++j)
 					{
-						neighbour = gen_2opt(best, i, j);
-						current_obj_func = obj_func(neighbour);
+						gen_2opt(best, neighbour, i, j);
+						const float current_obj_func = obj_func(partial_costs);
+
 						if (current_obj_func < best_obj_func) {
 							best_obj_func = current_obj_func;
-							best = neighbour;
-							found = 1;
+							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
+							found = true;
 						}
 					}
 				}
-			} while (found == 1);
+			} while (found);
 
-			return best;
+			std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
+			return best_obj_func;
+		}
+
+		float random(int time) {
+			std::vector<int> best;
+			auto time0 = high_resolution_clock::now();
+			init_random();
+			std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
+			float best_obj_func = init_obj_func(current_permutation);
+			while ((high_resolution_clock::now() - time0).count() < time){
+				init_random();
+				float current_obj_func = init_obj_func(current_permutation);
+				if (current_obj_func < best_obj_func)
+				{
+					best_obj_func = current_obj_func;
+					std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
+				}
+			}
+			std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
+			return best_obj_func;
+		}
+
+		std::vector<int> getCurrentPerm(){
+			return current_permutation;
 		}
 
 	private:
@@ -208,25 +246,82 @@ class QAP
 		std::vector<float> partial_costs;
 };
 
-float time_count()
+std::pair<std::vector<int>, std::vector<float>> time_count(QAP& instance, int algorithm, int time_random)
 {
 	int licznik = 0; 
 	auto time0 = high_resolution_clock::now();
+    high_resolution_clock::time_point start; 
+    std::vector<int> time_counts;
+	std::vector<float> scores;
 
 	do{
-		// algorytm();
+		instance.init_random();
+		start = high_resolution_clock::now();
+
+		switch(algorithm){
+			case 1:
+				scores.push_back(instance.random(time_random));
+				break;
+
+			case 2:
+				scores.push_back(instance.init_heuristic());
+				break;
+
+			case 3:
+				scores.push_back(instance.greedy(instance.getCurrentPerm()));
+				break;
+
+			case 4:
+				scores.push_back(instance.steepest(instance.getCurrentPerm()));
+				break;
+		}		
+
 		licznik++;
+        time_counts.push_back((high_resolution_clock::now() - start).count());
+
 	} while ( licznik < 10 || (high_resolution_clock::now() - time0).count() < 100 );
 
-	return (float)((high_resolution_clock::now() - time0).count() / licznik);
+	std::pair<std::vector<int>, std::vector<float>> ret = std::make_pair(time_counts, scores);
+
+	return ret;
+}
+
+std::vector<float> stats(std::vector<int> v){
+	float mean = std::accumulate( v.begin(), v.end(), 0.0)/v.size();
+	int min = *std::min_element(v.begin(), v.end());
+	int max = *std::max_element(v.begin(), v.end());
+	std::nth_element(v.begin(), v.begin() + static_cast<int>(v.size()/2) + 1, v.end());
+	float median = static_cast<float>(v[static_cast<int>(v.size()/2)]);
+	if (v.size() % 2 == 1){
+		median += v[static_cast<int>(v.size()/2)+1];
+		median /= 2;
+	}
+
+	std::vector<float> stats = { mean, median, static_cast<float>(min), static_cast<float>(max)};
+
+	return stats;
 }
 
 
-int main()
+int main(int argc, char** argv)
 {
-	QAP test("test.txt");
+	std::string path = argv[1];
+	int algorithm = std::stoi(argv[2]);
+	int time_random = std::stoi(argv[3]);
 
-	std::cout << time_count() << "\n";
+	QAP instance(path);
+	std::pair<std::vector<int>, std::vector<float>> result;
+	result = time_count(instance, algorithm, time_random);
+
+	for (int i = 0; i < result.first.size(); i++){
+		std::cout << result.first[i] << "\t" << result.second[i] << "\n";
+	}
+
+	auto stats_time = stats(result.first);
+
+	for (auto& x : stats_time)
+		std::cout << x << "\n";
+
 	return 0;
 }
 
