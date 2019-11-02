@@ -33,10 +33,9 @@ class PermGen
 
 struct Mat
 {
-	public:
-		std::vector<float> data;
-		int w = 0;
-		int h = 0;
+	std::vector<float> data;
+	int w = 0;
+	int h = 0;
 };
 
 class QAP
