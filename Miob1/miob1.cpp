@@ -104,32 +104,46 @@ class QAP
 				current_permutation[as[i]] = bs[i];
 		}
 
-		std::vector<int> gen_2opt(std::vector<int> perm, int i, int j)
+		std::vector<int> gen_2opt(const std::vector<int>& perm, int i, int j)
 		{
 			std::vector<int> ret(perm);
 			std::swap(ret[i], ret[j]);
+
+			recalculate_obj(i, j);
+
 			return ret;
 		}
 
-		float obj_func(std::vector<int> permutation)
+		float obj_func(const std::vector<int>& permutation)
 		{
-			const int size = static_cast<int>(current_permutation.size());
 			float sum = 0;
-			for (int i = 0; i < size; ++i) {
-				for (int j = 0; j < size; ++j)
-				{
-					sum += a.data[i * a.w + j] * b.data[permutation[i] * b.w + permutation[j]];
-				}
-			}
+
+			for (const auto part : partial_costs)
+				sum += part;
+
 			return sum;
 		}
 
-		float obj_func_neighbour()
+		float recalculate_obj(int i, int j)
 		{
+			const int size = current_permutation.size();
+			
+			//recalculate i, j rows
+			for (int k = 0; k < size; ++k)
+				partial_costs[i * size + k] = a.data[i * size + k] * b.data[current_permutation[i] * b.w + current_permutation[k]];
 
+			for (int k = 0; k < size; ++k)
+				partial_costs[j * size + k] = a.data[j * size + k] * b.data[current_permutation[j] * b.w + current_permutation[k]];
+
+			//recalculate i, j columns
+			for (int k = 0; k < size; ++k)
+				partial_costs[k * size + i] = a.data[k * size + i] * b.data[current_permutation[k] * b.w + current_permutation[i]];
+
+			for (int k = 0; k < size; ++k)
+				partial_costs[k * size + j] = a.data[k * size + j] * b.data[current_permutation[k] * b.w + current_permutation[j]];
 		}
 
-		std::vector<int> greedy(std::vector<int> perm)
+		std::vector<int> greedy(const std::vector<int>& perm)
 		{
 			const int size = static_cast<int>(current_permutation.size());
 			std::vector<int> best(perm);
