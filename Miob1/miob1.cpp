@@ -33,9 +33,10 @@ class PermGen
 
 struct Mat
 {
-	std::vector<float> data;
-	int w = 0;
-	int h = 0;
+	public:
+		std::vector<float> data;
+		int w = 0;
+		int h = 0;
 };
 
 class QAP
@@ -113,11 +114,12 @@ class QAP
 
 		float obj_func(std::vector<int> permutation)
 		{
+			const int size = static_cast<int>(current_permutation.size());
 			float sum = 0;
 			for (int i = 0; i < size; ++i) {
 				for (int j = 0; j < size; ++j)
 				{
-					sum += a[i][j] * b[permutation[i]][permutation[j]];
+					sum += a.data[i * a.w + j] * b.data[permutation[i] * b.w + permutation[j]];
 				}
 			}
 			return sum;
@@ -130,6 +132,7 @@ class QAP
 
 		std::vector<int> greedy(std::vector<int> perm)
 		{
+			const int size = static_cast<int>(current_permutation.size());
 			std::vector<int> best(perm);
 			std::vector<int> neighbour;
 			float current_obj_func = obj_func(perm);
@@ -163,6 +166,7 @@ class QAP
 			float current_obj_func = obj_func(perm);
 			float best_obj_func = current_obj_func;
 			bool found;
+			const int size = static_cast<int>(current_permutation.size());
 
 			do {
 				found = 0;
