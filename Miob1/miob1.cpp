@@ -110,8 +110,6 @@ class QAP
 		{
 			std::memcpy(out.data(), perm.data(), sizeof(int) * perm.size());
 			std::swap(out[i], out[j]);
-
-			recalculate_obj(out, i, j);
 		}
 
 		float obj_func(const std::vector<float>& costs)
@@ -124,32 +122,39 @@ class QAP
 			return sum;
 		}
 
-		void recalculate_obj(const std::vector<int>& perm, int i, int j)
+		void recalculate_obj(const std::vector<int>& perm, std::vector<float>& costs, int i, int j)
 		{
 			const int size = perm.size();
 			
 			//recalculate i, j rows
 			for (int k = 0; k < size; ++k)
-				partial_costs[i * size + k] = a.data[i * size + k] * b.data[perm[i] * b.w + perm[k]];
+				costs[i * size + k] = a.data[i * a.w + k] * b.data[perm[i] * b.w + perm[k]];
 
 			for (int k = 0; k < size; ++k)
-				partial_costs[j * size + k] = a.data[j * size + k] * b.data[perm[j] * b.w + perm[k]];
+				costs[j * size + k] = a.data[j * a.w + k] * b.data[perm[j] * b.w + perm[k]];
 
 			//recalculate i, j columns
 			for (int k = 0; k < size; ++k)
-				partial_costs[k * size + i] = a.data[k * size + i] * b.data[perm[k] * b.w + perm[i]];
+				costs[k * size + i] = a.data[k * a.w + i] * b.data[perm[k] * b.w + perm[i]];
 
 			for (int k = 0; k < size; ++k)
-				partial_costs[k * size + j] = a.data[k * size + j] * b.data[perm[k] * b.w + perm[j]];
+				costs[k * size + j] = a.data[k * a.w + j] * b.data[perm[k] * b.w + perm[j]];
 		}
 
 		float init_obj_func(const std::vector<int>& perm)
 		{
 			const int size = static_cast<int>(current_permutation.size());
 
-			for (int i = 0; i < size; ++i) 
-				for (int j = 0; j < size; ++j)
-					partial_costs[i * size + j] = a.data[i * a.w + j] * b.data[perm[i] * b.w + perm[j]];
+			for (int i = 0; i < size; ++i) {
+				for (int j = 0; j < size; ++j) {
+					const float part = a.data[i * a.w + j] * b.data[perm[i] * b.w + perm[j]];
+
+					/*if (part != partial_costs[i * size + j])
+						std::cout << "i: " << i << " j: " << j << " partial: " << partial_costs[i * size + j] << " real: " << part << "\n";*/
+
+					partial_costs[i * size + j] = part;
+				}
+			}
 
 			return obj_func(partial_costs);
 		}
@@ -158,10 +163,11 @@ class QAP
 		{
 			std::vector<int> best(perm);
 			std::vector<int> neighbour(perm);
+			std::vector<float> current_partials(partial_costs);
 			
 			const int size = static_cast<int>(current_permutation.size());
 			float best_obj_func = init_obj_func(perm);
-			bool found;
+			bool found = false;
 
 			do {
 				found = false;
@@ -170,11 +176,16 @@ class QAP
 					for (int j = i + 1; (j < size) && !found; ++j)
 					{
 						gen_2opt(best, neighbour, i, j);
-						const float current_obj_func = obj_func(partial_costs);
+
+						std::memcpy(current_partials.data(), partial_costs.data(), sizeof(float) * partial_costs.size());
+						recalculate_obj(neighbour, current_partials, i, j);
+
+						const float current_obj_func = obj_func(current_partials);
 
 						if (current_obj_func < best_obj_func) {
 							best_obj_func = current_obj_func;
 							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
+							std::memcpy(partial_costs.data(), current_partials.data(), sizeof(float) * partial_costs.size());
 							found = true;
 						}
 					}
@@ -189,6 +200,7 @@ class QAP
 		{
 			std::vector<int> best(perm);
 			std::vector<int> neighbour(perm);
+			std::vector<float> current_partials(partial_costs);
 
 			const int size = static_cast<int>(current_permutation.size());
 			float best_obj_func = init_obj_func(perm);
@@ -200,11 +212,16 @@ class QAP
 					for (int j = i + 1; j < size; ++j)
 					{
 						gen_2opt(best, neighbour, i, j);
-						const float current_obj_func = obj_func(partial_costs);
+
+						std::memcpy(current_partials.data(), partial_costs.data(), sizeof(float) * partial_costs.size());
+						recalculate_obj(neighbour, current_partials, i, j);
+
+						const float current_obj_func = obj_func(current_partials);
 
 						if (current_obj_func < best_obj_func) {
 							best_obj_func = current_obj_func;
 							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
+							std::memcpy(partial_costs.data(), current_partials.data(), sizeof(float) * partial_costs.size());
 							found = true;
 						}
 					}
@@ -221,6 +238,7 @@ class QAP
 			init_random();
 			std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
 			float best_obj_func = init_obj_func(current_permutation);
+
 			while ((high_resolution_clock::now() - time0).count() < time){
 				init_random();
 				float current_obj_func = init_obj_func(current_permutation);
@@ -230,6 +248,7 @@ class QAP
 					std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
 				}
 			}
+
 			std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
 			return best_obj_func;
 		}
@@ -313,9 +332,20 @@ int main(int argc, char** argv)
 	std::pair<std::vector<int>, std::vector<float>> result;
 	result = time_count(instance, algorithm, time_random);
 
+	std::cout << "time\tscore\n";
+
 	for (int i = 0; i < result.first.size(); i++){
 		std::cout << result.first[i] << "\t" << result.second[i] << "\n";
 	}
+
+	auto perm = instance.getCurrentPerm();
+
+	std::cout << "permutation:\n";
+
+	for (auto i : perm)
+		std::cout << i << " ";
+
+	std::cout << "\n";
 
 	auto stats_time = stats(result.first);
 
