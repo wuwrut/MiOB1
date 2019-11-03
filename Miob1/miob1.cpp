@@ -233,13 +233,13 @@ class QAP
 		}
 
 		float random(int time) {
-			std::vector<int> best;
-			auto time0 = high_resolution_clock::now();
+			std::vector<int> best(current_permutation);
+			const auto time0 = high_resolution_clock::now();
 			init_random();
 			std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
 			float best_obj_func = init_obj_func(current_permutation);
 
-			while ((high_resolution_clock::now() - time0).count() < time){
+			while (std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < time){
 				init_random();
 				float current_obj_func = init_obj_func(current_permutation);
 				if (current_obj_func < best_obj_func)
@@ -298,7 +298,7 @@ std::pair<std::vector<int>, std::vector<float>> time_count(QAP& instance, int al
 		licznik++;
         time_counts.push_back((high_resolution_clock::now() - start).count());
 
-	} while ( licznik < 10 || (high_resolution_clock::now() - time0).count() < 100 );
+	} while ( licznik < 10 || std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < 100 );
 
 	std::pair<std::vector<int>, std::vector<float>> ret = std::make_pair(time_counts, scores);
 
