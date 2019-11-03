@@ -187,6 +187,7 @@ class QAP
 							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
 							std::memcpy(partial_costs.data(), current_partials.data(), sizeof(float) * partial_costs.size());
 							found = true;
+							swaps++;
 						}
 					}
 				}
@@ -223,6 +224,7 @@ class QAP
 							std::memcpy(best.data(), neighbour.data(), sizeof(int) * neighbour.size());
 							std::memcpy(partial_costs.data(), current_partials.data(), sizeof(float) * partial_costs.size());
 							found = true;
+							swaps++;
 						}
 					}
 				}
@@ -246,6 +248,7 @@ class QAP
 				{
 					best_obj_func = current_obj_func;
 					std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
+					swaps++;
 				}
 			}
 
@@ -257,21 +260,35 @@ class QAP
 			return current_permutation;
 		}
 
+		int GetSwaps()
+		{
+			const int tmp = swaps;
+			swaps = 0;
+			return tmp;
+		}
+
 	private:
 		Mat a, b;
 		PermGen rng;
 		
 		std::vector<int> current_permutation;
 		std::vector<float> partial_costs;
+		int swaps = 0;
 };
 
-std::pair<std::vector<int>, std::vector<float>> time_count(QAP& instance, int algorithm, int time_random)
+std::tuple<std::vector<int>, std::vector<float>, std::vector<int>> time_count(QAP& instance, int algorithm, int time_random)
 {
 	int licznik = 0; 
 	auto time0 = high_resolution_clock::now();
     high_resolution_clock::time_point start; 
+
+	std::vector<int> swaps;
     std::vector<int> time_counts;
 	std::vector<float> scores;
+
+	swaps.reserve(10000);
+	time_counts.reserve(10000);
+	scores.reserve(10000);
 
 	do{
 		instance.init_random();
@@ -297,12 +314,11 @@ std::pair<std::vector<int>, std::vector<float>> time_count(QAP& instance, int al
 
 		licznik++;
         time_counts.push_back((high_resolution_clock::now() - start).count());
+		swaps.push_back(instance.GetSwaps());
 
 	} while ( licznik < 10 || std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < 100 );
 
-	std::pair<std::vector<int>, std::vector<float>> ret = std::make_pair(time_counts, scores);
-
-	return ret;
+	return std::make_tuple(time_counts, scores, swaps);
 }
 
 std::vector<float> stats(std::vector<int> v){
@@ -329,13 +345,13 @@ int main(int argc, char** argv)
 	int time_random = std::stoi(argv[3]);
 
 	QAP instance(path);
-	std::pair<std::vector<int>, std::vector<float>> result;
-	result = time_count(instance, algorithm, time_random);
+	
+	auto&& [times, scores, swaps] = time_count(instance, algorithm, time_random);
 
-	std::cout << "time\tscore\n";
+	std::cout << "time\tscore\tswaps\n";
 
-	for (int i = 0; i < result.first.size(); i++){
-		std::cout << result.first[i] << "\t" << result.second[i] << "\n";
+	for (int i = 0; i < times.size(); i++){
+		std::cout << times[i] << "\t" << scores[i] << "\t" << swaps[i] << "\n";
 	}
 
 	auto perm = instance.getCurrentPerm();
@@ -347,7 +363,7 @@ int main(int argc, char** argv)
 
 	std::cout << "\n";
 
-	auto stats_time = stats(result.first);
+	auto stats_time = stats(times);
 
 	for (auto& x : stats_time)
 		std::cout << x << "\n";
