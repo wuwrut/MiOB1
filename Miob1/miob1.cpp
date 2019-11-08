@@ -89,6 +89,7 @@ public:
 	std::vector<float> init_heuristic()
 	{
 		const int size = static_cast<int>(current_permutation.size());
+		const int row = rng(0, a.h);
 		std::vector<int> as(size), bs(size);
 
 		for (int i = 0; i < size; ++i)
@@ -97,10 +98,14 @@ public:
 			bs[i] = i;
 		}
 
-		std::sort(as.begin(), as.end(), [&](const auto& left, const auto& right) { return a.data[left] > a.data[right]; });
-		std::sort(bs.begin(), bs.end(), [&](const auto& left, const auto& right) { return b.data[left] < b.data[right]; });
+		std::swap(bs[0], bs[row]);
 
-		for (int i = 0; i < size; ++i)
+		std::sort(as.begin()+1, as.end(), [&](const auto& left, const auto& right) { return a.data[a.w * row + left] > a.data[a.w * row + right]; });
+		std::sort(bs.begin()+1, bs.end(), [&](const auto& left, const auto& right) { return b.data[b.w * row + left] < b.data[b.w * row + right]; });
+
+		current_permutation[0] = row;
+
+		for (int i = 1; i < size; ++i)
 			current_permutation[as[i]] = bs[i];
 
 		return { init_obj_func(current_permutation) };
