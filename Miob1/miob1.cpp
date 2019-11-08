@@ -1,4 +1,4 @@
-#include <random>
+﻿#include <random>
 #include <iostream>
 #include <chrono>
 #include <numeric>
@@ -75,7 +75,7 @@ public:
 		partial_costs = std::vector<float>(n * n, 0);
 	}
 
-	std::vector<int> init_random()
+	void init_random()
 	{
 		const int size = static_cast<int>(current_permutation.size());
 
@@ -84,11 +84,9 @@ public:
 
 		for (int i = size - 1; i >= 0; --i)
 			std::swap(current_permutation[i], current_permutation[rng(0, i)]);
-
-		return current_permutation;
 	}
 
-	float init_heuristic()
+	std::vector<float> init_heuristic()
 	{
 		const int size = static_cast<int>(current_permutation.size());
 		std::vector<int> as(size), bs(size);
@@ -105,10 +103,10 @@ public:
 		for (int i = 0; i < size; ++i)
 			current_permutation[as[i]] = bs[i];
 
-		return init_obj_func(current_permutation);
+		return { init_obj_func(current_permutation) };
 	}
 
-	void gen_2opt(const std::vector<int>& perm, std::vector<int>& out, int i, int j)
+	void gen_swap(const std::vector<int>& perm, std::vector<int>& out, int i, int j)
 	{
 		std::memcpy(out.data(), perm.data(), sizeof(int) * perm.size());
 		std::swap(out[i], out[j]);
@@ -149,23 +147,19 @@ public:
 
 		for (int i = 0; i < size; ++i) {
 			for (int j = 0; j < size; ++j) {
-				const float part = a.data[i * a.w + j] * b.data[perm[i] * b.w + perm[j]];
-
-				/*if (part != partial_costs[i * size + j])
-					std::cout << "i: " << i << " j: " << j << " partial: " << partial_costs[i * size + j] << " real: " << part << "\n";*/
-
-				partial_costs[i * size + j] = part;
+				partial_costs[i * size + j] = a.data[i * a.w + j] * b.data[perm[i] * b.w + perm[j]];
 			}
 		}
 
 		return obj_func(partial_costs);
 	}
 
-	float greedy(const std::vector<int>& perm)
+	std::vector<float> greedy(const std::vector<int>& perm)
 	{
 		std::vector<int> best(perm);
 		std::vector<int> neighbour(perm);
 		std::vector<float> current_partials(partial_costs);
+		std::vector<float> scores; scores.reserve(100000);
 
 		const int size = static_cast<int>(current_permutation.size());
 		float best_obj_func = init_obj_func(perm);
@@ -177,7 +171,7 @@ public:
 			for (int i = 0; (i < size - 1) && !found; ++i) {
 				for (int j = i + 1; (j < size) && !found; ++j)
 				{
-					gen_2opt(best, neighbour, i, j);
+					gen_swap(best, neighbour, i, j);
 
 					std::memcpy(current_partials.data(), partial_costs.data(), sizeof(float) * partial_costs.size());
 					recalculate_obj(neighbour, current_partials, i, j);
@@ -191,19 +185,22 @@ public:
 						found = true;
 						swaps++;
 					}
+
+					scores.push_back(best_obj_func);
 				}
 			}
 		} while (found);
 
 		std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
-		return best_obj_func;
+		return scores;
 	}
 
-	float steepest(const std::vector<int>& perm)
+	std::vector<float> steepest(const std::vector<int>& perm)
 	{
 		std::vector<int> best(perm);
 		std::vector<int> neighbour(perm);
 		std::vector<float> current_partials(partial_costs);
+		std::vector<float> scores; scores.reserve(100000);
 
 		const int size = static_cast<int>(current_permutation.size());
 		float best_obj_func = init_obj_func(perm);
@@ -214,7 +211,7 @@ public:
 			for (int i = 0; i < size - 1; ++i) {
 				for (int j = i + 1; j < size; ++j)
 				{
-					gen_2opt(best, neighbour, i, j);
+					gen_swap(best, neighbour, i, j);
 
 					std::memcpy(current_partials.data(), partial_costs.data(), sizeof(float) * partial_costs.size());
 					recalculate_obj(neighbour, current_partials, i, j);
@@ -228,16 +225,20 @@ public:
 						found = true;
 						swaps++;
 					}
+
+					scores.push_back(best_obj_func);
 				}
 			}
 		} while (found);
 
 		std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
-		return best_obj_func;
+		return scores;
 	}
 
-	float random(int time) {
+	std::vector<float> random(int time) {
 		std::vector<int> best(current_permutation);
+		std::vector<float> scores; scores.reserve(100000);
+
 		const auto time0 = high_resolution_clock::now();
 		init_random();
 		std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
@@ -246,16 +247,18 @@ public:
 		while (std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < time) {
 			init_random();
 			float current_obj_func = init_obj_func(current_permutation);
+
 			if (current_obj_func < best_obj_func)
 			{
 				best_obj_func = current_obj_func;
 				std::memcpy(best.data(), current_permutation.data(), sizeof(int) * current_permutation.size());
 				swaps++;
 			}
+			scores.push_back(best_obj_func);
 		}
 
 		std::memcpy(current_permutation.data(), best.data(), sizeof(int) * best.size());
-		return best_obj_func;
+		return scores;
 	}
 
 	std::vector<int> getCurrentPerm() {
@@ -278,10 +281,9 @@ private:
 	int swaps = 0;
 };
 
-std::tuple<std::vector<int>, std::vector<int>, std::vector<float>, std::vector<int>, std::vector<int>> time_count(QAP& instance, int algorithm, int time_random)
+std::tuple<std::vector<int>, std::vector<int>, std::vector<std::vector<float>>, std::vector<int>, std::vector<int>> time_count(QAP& instance, int algorithm, int time_random, int how_many_times)
 {
 	int licznik = 0;
-	int best_score = INT_MAX;
 	auto time0 = high_resolution_clock::now();
 	high_resolution_clock::time_point start;
 
@@ -290,47 +292,46 @@ std::tuple<std::vector<int>, std::vector<int>, std::vector<float>, std::vector<i
 	std::vector<int> swaps;
 	std::vector<int> time_counts;
 	std::vector<float> scores;
-	int score;
+	std::vector<std::vector<float>> runs;
 
 	swaps.reserve(10000);
 	time_counts.reserve(10000);
 	scores.reserve(10000);
+	runs.reserve(how_many_times);
 
 	do {
-		init_perm = instance.init_random();
+		instance.init_random();
+		init_perm = instance.getCurrentPerm();
 		start = high_resolution_clock::now();
 
 		switch (algorithm) {
 		case 1:
-			score = instance.random(time_random);
+			scores = instance.random(time_random);
 			break;
 
 		case 2:
-			score = instance.init_heuristic();
+			scores = instance.init_heuristic();
 			break;
 
 		case 3:
-			score = instance.greedy(instance.getCurrentPerm());
+			scores = instance.greedy(instance.getCurrentPerm());
 			break;
 
 		case 4:
-			score = instance.steepest(instance.getCurrentPerm());
+			scores = instance.steepest(instance.getCurrentPerm());
 			break;
 		}
-		scores.push_back(score);
+
+		runs.push_back(std::move(scores));
 		licznik++;
 		time_counts.push_back((high_resolution_clock::now() - start).count());
 		swaps.push_back(instance.GetSwaps());
 
-		if (score < best_score)
-		{
-			best_score = score;
-			best_perm = instance.getCurrentPerm();
-		}
+		best_perm = instance.getCurrentPerm();
 
-	} while (licznik < 10 || std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < 100);
+	} while (licznik < how_many_times || std::chrono::duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - time0).count() < 100);
 
-	return std::make_tuple(init_perm, time_counts, scores, swaps, best_perm);
+	return std::make_tuple(init_perm, time_counts, runs, swaps, best_perm);
 }
 
 std::vector<float> stats(std::vector<int> v) {
@@ -355,20 +356,32 @@ int main(int argc, char** argv)
 	std::string path = argv[1];
 	int algorithm = std::stoi(argv[2]);
 	int time_random = std::stoi(argv[3]);
+	int how_many_times = std::stoi(argv[4]);
 
 	QAP instance(path);
-	auto tup = time_count(instance, algorithm, time_random);
+	auto tup = time_count(instance, algorithm, time_random, how_many_times);
 	//auto&& [init_perm, times, scores, swaps, best_perm] = time_count(instance, algorithm, time_random);
 	std::vector<int> init_perm = std::get<0>(tup);
 	std::vector<int> times = std::get<1>(tup);
-	std::vector<float> scores = std::get<2>(tup);
+	std::vector<std::vector<float>> scores = std::get<2>(tup);
 	std::vector<int> swaps = std::get<3>(tup);
 	std::vector<int> best_perm = std::get<4>(tup);
 
-	std::cout << "time\tscore\tswaps\n";
+	//print scores
+	std::cout << scores.size() << "\n";
+
+	for (const auto& s : scores) {
+		for (const auto& f : s) {
+			std::cout << f << " ";
+		}
+		std::cout << "\n";
+	}
+
+
+	std::cout << "times:\n";
 
 	for (int i = 0; i < times.size(); i++) {
-		std::cout << std::fixed << times[i] << "\t" << scores[i] << "\t" << swaps[i] << "\n";
+		std::cout << std::fixed << times[i] << "\n";
 	}
 
 	std::cout << "initial permutation:\n";
@@ -387,10 +400,10 @@ int main(int argc, char** argv)
 
 	std::cout << "\n";
 
-	auto stats_time = stats(times);
+	//auto stats_time = stats(times);
 
-	for (auto& x : stats_time)
-		std::cout << x << "\n";
+	/*for (auto& x : stats_time)
+		std::cout << x << "\n";*/
 
 	return 0;
 }
