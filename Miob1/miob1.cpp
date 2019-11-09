@@ -89,7 +89,7 @@ public:
 	std::vector<float> init_heuristic()
 	{
 		const int size = static_cast<int>(current_permutation.size());
-		const int row = rng(0, a.h);
+		const int row = rng(0, a.h-1);
 		std::vector<int> as(size), bs(size);
 
 		for (int i = 0; i < size; ++i)
